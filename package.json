@@ -1,0 +1,43 @@
+{
+  "name": "whatsapp-api-module",
+  "version": "1.0.0",
+  "description": "WhatsApp API Module based on Baileys with multitenant support",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn --transpile-only src/dev-setup.ts",
+    "dev:direct": "ts-node-dev --respawn --transpile-only -r dotenv/config src/app.ts",
+    "start": "node dist/app.js",
+    "start:dev": "ts-node src/dev-setup.ts",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "check-env": "node check-env.js",
+    "setup-db": "node scripts/setup-database.js",
+    "reset-db": "node scripts/setup-database.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "typeorm": "^0.3.17",
+    "mysql2": "^3.6.5",
+    "qrcode": "^1.5.3",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.32.6",
+    "ffmpeg-static": "^5.2.0",
+    "node-cron": "^3.0.3",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/multer": "^1.4.11",
+    "@types/qrcode": "^1.5.5",
+    "@types/node-cron": "^3.0.11",
+    "ts-node-dev": "^2.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.3.3"
+  }
+}

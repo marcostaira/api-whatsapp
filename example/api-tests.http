@@ -1,0 +1,212 @@
+### API Tests for WhatsApp Module
+### Base URL: http://localhost:3000/api
+
+### 1. Health Check
+GET http://localhost:3000/health
+
+### 2. Create Tenant
+POST http://localhost:3000/api/tenants
+Content-Type: application/json
+
+{
+  "name": "Empresa Teste",
+  "receiveGroupMessages": true,
+  "autoReconnect": true,
+  "webhookUrl": "https://webhook.site/your-unique-id"
+}
+
+### 3. Get All Tenants
+GET http://localhost:3000/api/tenants
+
+### 4. Get Specific Tenant
+GET http://localhost:3000/api/tenants/{{tenantId}}
+
+### 5. Create Connection (QR Code)
+POST http://localhost:3000/api/connect
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "usePairingCode": false
+}
+
+### 6. Create Connection (Pairing Code)
+POST http://localhost:3000/api/connect
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "usePairingCode": true,
+  "phoneNumber": "5511999999999"
+}
+
+### 7. Check Connection Status
+GET http://localhost:3000/api/connection/{{sessionId}}/status
+X-API-Key: {{apiKey}}
+
+### 8. Get All Connections
+GET http://localhost:3000/api/connections
+X-API-Key: {{apiKey}}
+
+### 9. Send Text Message
+POST http://localhost:3000/api/messages/send
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sessionId": "{{sessionId}}",
+  "to": "5511999999999@s.whatsapp.net",
+  "type": "text",
+  "content": "Olá! Esta é uma mensagem de teste da API WhatsApp."
+}
+
+### 10. Send Image Message
+POST http://localhost:3000/api/messages/send
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sessionId": "{{sessionId}}",
+  "to": "5511999999999@s.whatsapp.net",
+  "type": "image",
+  "media": {
+    "data": "https://via.placeholder.com/300x200.png",
+    "mimetype": "image/png",
+    "caption": "Imagem de teste via API"
+  }
+}
+
+### 11. Send Location Message
+POST http://localhost:3000/api/messages/send
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sessionId": "{{sessionId}}",
+  "to": "5511999999999@s.whatsapp.net",
+  "type": "location",
+  "location": {
+    "latitude": -23.5505,
+    "longitude": -46.6333,
+    "name": "São Paulo",
+    "address": "São Paulo, SP, Brasil"
+  }
+}
+
+### 12. Send Contact Message
+POST http://localhost:3000/api/messages/send
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sessionId": "{{sessionId}}",
+  "to": "5511999999999@s.whatsapp.net",
+  "type": "contact",
+  "contact": {
+    "name": "João Silva",
+    "phone": "5511888888888"
+  }
+}
+
+### 13. Send Bulk Messages
+POST http://localhost:3000/api/messages/send-bulk
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sessionId": "{{sessionId}}",
+  "messages": [
+    {
+      "to": "5511999999999@s.whatsapp.net",
+      "message": {
+        "type": "text",
+        "content": "Primeira mensagem em lote"
+      }
+    },
+    {
+      "to": "5511888888888@s.whatsapp.net",
+      "message": {
+        "type": "text",
+        "content": "Segunda mensagem em lote"
+      }
+    }
+  ]
+}
+
+### 14. Get Messages
+GET http://localhost:3000/api/messages?limit=10&direction=inbound
+X-API-Key: {{apiKey}}
+
+### 15. Get Unread Messages
+GET http://localhost:3000/api/messages/unread
+X-API-Key: {{apiKey}}
+
+### 16. Search Messages
+GET http://localhost:3000/api/messages/search?query=teste&limit=5
+X-API-Key: {{apiKey}}
+
+### 17. Get Message Stats
+GET http://localhost:3000/api/messages/stats
+X-API-Key: {{apiKey}}
+
+### 18. Get Contacts
+GET http://localhost:3000/api/contacts?limit=20
+X-API-Key: {{apiKey}}
+
+### 19. Search Contacts
+GET http://localhost:3000/api/contacts/search?query=joão&limit=10
+X-API-Key: {{apiKey}}
+
+### 20. Get Group Contacts
+GET http://localhost:3000/api/contacts/groups
+X-API-Key: {{apiKey}}
+
+### 21. Block Contact
+POST http://localhost:3000/api/contacts/5511999999999@s.whatsapp.net/block
+X-API-Key: {{apiKey}}
+
+### 22. Unblock Contact
+POST http://localhost:3000/api/contacts/5511999999999@s.whatsapp.net/unblock
+X-API-Key: {{apiKey}}
+
+### 23. Upload Media
+POST http://localhost:3000/api/media/upload
+Content-Type: multipart/form-data
+X-API-Key: {{apiKey}}
+
+# Use um arquivo real aqui
+# --form 'file=@/path/to/your/image.jpg'
+
+### 24. Test Webhook
+POST http://localhost:3000/api/webhook/test
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "url": "https://webhook.site/your-unique-id"
+}
+
+### 25. Get Profile
+GET http://localhost:3000/api/profile/{{sessionId}}
+X-API-Key: {{apiKey}}
+
+### 26. Export Messages
+GET http://localhost:3000/api/export/messages?type=text&limit=100
+X-API-Key: {{apiKey}}
+
+### 27. Export Contacts
+GET http://localhost:3000/api/export/contacts
+X-API-Key: {{apiKey}}
+
+### 28. Disconnect Session
+DELETE http://localhost:3000/api/connection/{{sessionId}}
+X-API-Key: {{apiKey}}
+
+### 29. Update Tenant Settings
+PUT http://localhost:3000/api/tenants/{{tenantId}}
+Content-Type: application/json
+
+{
+  "receiveGroupMessages": false,
+  "webhookUrl": "https://new-webhook-url.com/webhook"
+}
