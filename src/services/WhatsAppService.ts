@@ -30,10 +30,11 @@ import {
   MessageDirection,
   MessageStatus,
 } from "../entities/Message";
+import { getBrowserConfig } from "../config/proxy";
 import {
-  WhatsAppConnection,
   ConnectionOptions,
   SendMessageOptions,
+  WhatsAppConnection,
 } from "../types/interfaces";
 
 export class WhatsAppService {
@@ -63,9 +64,17 @@ export class WhatsAppService {
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`Using WA v${version.join(".")}, isLatest: ${isLatest}`);
 
-    const { state, saveCreds } = await useMultiFileAuthState(
-      `./auth_info_${sessionId}`
-    );
+    // Use database auth state instead of file
+    const { state, saveCreds } = {
+      state: await this.authService.loadState(tenantId, sessionId),
+      saveCreds: async () => {
+        // This will be called by Baileys to save auth state
+        const currentState = socket.authState;
+        if (currentState) {
+          await this.authService.saveState(tenantId, sessionId, currentState);
+        }
+      },
+    };
 
     const socket = makeWASocket({
       version,
@@ -79,6 +88,10 @@ export class WhatsAppService {
       generateHighQualityLinkPreview: true,
       syncFullHistory: false,
       markOnlineOnConnect: true,
+      defaultQueryTimeoutMs: 60000,
+      connectTimeoutMs: 20000,
+      qrTimeout: 45000,
+      retryRequestDelayMs: 250,
     });
 
     const connection: WhatsAppConnection = {
@@ -90,8 +103,21 @@ export class WhatsAppService {
 
     this.connections.set(sessionId, connection);
 
-    // Save authentication state
-    socket.ev.on("creds.update", saveCreds);
+    // Save authentication state properly
+    socket.ev.on("creds.update", async () => {
+      try {
+        const currentState = {
+          creds: socket.authState.creds,
+          keys: socket.authState.keys,
+        };
+        await this.authService.saveState(tenantId, sessionId, currentState);
+      } catch (error: any) {
+        console.error(
+          "Error saving auth state:",
+          error?.message || "Unknown error"
+        );
+      }
+    });
 
     // Handle connection updates
     socket.ev.on("connection.update", async (update) => {
@@ -124,21 +150,42 @@ export class WhatsAppService {
     });
 
     if (usePairingCode && phoneNumber) {
-      const pairingCode = await socket.requestPairingCode(phoneNumber);
-      await this.authService.savePairingCode(tenantId, sessionId, pairingCode);
-      connection.pairingCode = pairingCode;
-
-      const tenant = await this.configService.getTenant(tenantId);
-      if (tenant?.webhookUrl) {
-        await this.webhookService.notifyPairingCode(
-          tenant.webhookUrl,
+      try {
+        const pairingCode = await socket.requestPairingCode(phoneNumber);
+        await this.authService.savePairingCode(
           tenantId,
           sessionId,
           pairingCode
         );
-      }
+        connection.pairingCode = pairingCode;
 
-      return { sessionId, pairingCode };
+        console.log(`Pairing code generated: ${pairingCode}`);
+
+        const tenant = await this.configService.getTenant(tenantId);
+        if (tenant?.webhookUrl) {
+          try {
+            await this.webhookService.notifyPairingCode(
+              tenant.webhookUrl,
+              tenantId,
+              sessionId,
+              pairingCode
+            );
+          } catch (webhookError: any) {
+            console.error(
+              "Webhook notification failed (non-critical):",
+              webhookError.message
+            );
+          }
+        }
+
+        return { sessionId, pairingCode };
+      } catch (error: any) {
+        console.error(
+          "Error generating pairing code:",
+          error?.message || "Unknown error"
+        );
+        throw new Error("Failed to generate pairing code");
+      }
     }
 
     return { sessionId };
@@ -152,6 +199,24 @@ export class WhatsAppService {
     if (!connection) return;
 
     const { connection: conn, lastDisconnect, qr } = update;
+
+    // Safe error handling
+    const getDisconnectReason = (error: any): number | undefined => {
+      if (error?.output?.statusCode) return error.output.statusCode;
+      if (error?.status) return error.status;
+      if (error?.code) return error.code;
+      return undefined;
+    };
+
+    const disconnectReason = lastDisconnect?.error
+      ? getDisconnectReason(lastDisconnect.error)
+      : undefined;
+
+    console.log("Connection update:", {
+      conn,
+      disconnectReason,
+      errorMessage: lastDisconnect?.error?.message,
+    });
 
     if (qr) {
       const qrCodeData = await QRCode.toDataURL(qr);
@@ -174,36 +239,54 @@ export class WhatsAppService {
     }
 
     if (conn === "close") {
-      const shouldReconnect =
-        (lastDisconnect?.error as Boom)?.output?.statusCode !==
-        DisconnectReason.loggedOut;
+      const shouldReconnect = disconnectReason !== DisconnectReason.loggedOut;
+
+      console.log("Connection closed:", {
+        disconnectReason,
+        shouldReconnect,
+        reasonName: disconnectReason
+          ? DisconnectReason[disconnectReason]
+          : "unknown",
+      });
+
+      connection.isConnected = false;
+      await this.authService.updateSessionStatus(
+        connection.tenantId,
+        sessionId,
+        SessionStatus.DISCONNECTED
+      );
 
       if (shouldReconnect) {
-        console.log(
-          "Connection closed, reconnecting...",
-          lastDisconnect?.error
-        );
-        await this.authService.updateSessionStatus(
-          connection.tenantId,
-          sessionId,
-          SessionStatus.DISCONNECTED
-        );
-
         const tenant = await this.configService.getTenant(connection.tenantId);
         if (tenant?.autoReconnect) {
+          console.log("Auto-reconnecting in 5 seconds...");
           setTimeout(() => {
             this.createConnection({ tenantId: connection.tenantId });
           }, 5000);
         }
       } else {
-        console.log("Connection closed. You are logged out.");
+        console.log("Logged out, clearing auth state");
         await this.authService.clearState(connection.tenantId, sessionId);
         this.connections.delete(sessionId);
       }
 
-      connection.isConnected = false;
+      const tenant = await this.configService.getTenant(connection.tenantId);
+      if (tenant?.webhookUrl) {
+        await this.webhookService.notifyConnection(
+          tenant.webhookUrl,
+          connection.tenantId,
+          sessionId,
+          "disconnected",
+          {
+            reason: disconnectReason
+              ? DisconnectReason[disconnectReason]
+              : "unknown",
+            shouldReconnect,
+          }
+        );
+      }
     } else if (conn === "open") {
-      console.log("Opened connection");
+      console.log("Connection opened successfully");
       connection.isConnected = true;
 
       await this.authService.updateSessionStatus(
@@ -239,6 +322,13 @@ export class WhatsAppService {
           user
         );
       }
+    } else if (conn === "connecting") {
+      console.log("Connecting to WhatsApp...");
+      await this.authService.updateSessionStatus(
+        connection.tenantId,
+        sessionId,
+        SessionStatus.CONNECTING
+      );
     }
   }
 
@@ -465,15 +555,18 @@ export class WhatsAppService {
           caption: mediaInfo.caption,
         });
       }
-    } catch (error) {
-      console.error("Error saving media message:", error);
+    } catch (error: any) {
+      console.error(
+        "Error saving media message:",
+        error?.message || "Unknown error"
+      );
     }
   }
 
   async sendMessage(
     tenantId: string,
     sessionId: string,
-    options: SendMessageOptions
+    options: SendMessageOptions & { to: string }
   ): Promise<any> {
     const connection = this.connections.get(sessionId);
     if (!connection || !connection.isConnected) {
@@ -635,8 +728,11 @@ export class WhatsAppService {
       await this.authService.clearState(connection.tenantId, sessionId);
       this.connections.delete(sessionId);
       return true;
-    } catch (error) {
-      console.error("Error disconnecting session:", error);
+    } catch (error: any) {
+      console.error(
+        "Error disconnecting session:",
+        error?.message || "Unknown error"
+      );
       return false;
     }
   }

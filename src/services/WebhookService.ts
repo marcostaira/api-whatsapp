@@ -23,7 +23,17 @@ export class WebhookService {
           return true;
         }
       } catch (error: any) {
-        console.error(`Webhook attempt ${attempt} failed:`, error.message);
+        if (error.response?.status === 429) {
+          console.warn(
+            `Webhook rate limited (429) - attempt ${attempt}/${this.maxRetries}`
+          );
+          if (attempt < this.maxRetries) {
+            await this.delay(this.retryDelay * attempt * 2); // Longer delay for rate limits
+            continue;
+          }
+        } else {
+          console.error(`Webhook attempt ${attempt} failed:`, error.message);
+        }
 
         if (attempt < this.maxRetries) {
           await this.delay(this.retryDelay * attempt);

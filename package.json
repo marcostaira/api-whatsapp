@@ -13,7 +13,8 @@
     "prebuild": "npm run clean",
     "check-env": "node check-env.js",
     "setup-db": "node scripts/setup-database.js",
-    "reset-db": "node scripts/setup-database.js"
+    "reset-db": "node scripts/setup-database.js",
+    "reset-connections": "node scripts/reset-connections.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.6.0",
