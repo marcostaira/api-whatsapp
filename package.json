@@ -5,16 +5,18 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node-dev --respawn --transpile-only src/dev-setup.ts",
-    "dev:direct": "ts-node-dev --respawn --transpile-only -r dotenv/config src/app.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "dev:startup": "ts-node-dev --respawn --transpile-only src/startup.ts",
     "start": "node dist/app.js",
-    "start:dev": "ts-node src/dev-setup.ts",
+    "start:startup": "node dist/startup.js",
     "clean": "rm -rf dist",
     "prebuild": "npm run clean",
     "check-env": "node check-env.js",
     "setup-db": "node scripts/setup-database.js",
     "reset-db": "node scripts/setup-database.js",
-    "reset-connections": "node scripts/reset-connections.js"
+    "reset-connections": "node scripts/reset-connections.js",
+    "test-connection": "node scripts/test-connection.js",
+    "migrate": "mysql -u${DB_USERNAME} -p${DB_PASSWORD} -h${DB_HOST} ${DB_DATABASE} < scripts/add-max-connections.sql"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.6.0",
@@ -28,7 +30,8 @@
     "sharp": "^0.32.6",
     "ffmpeg-static": "^5.2.0",
     "node-cron": "^3.0.3",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "@hapi/boom": "^10.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",

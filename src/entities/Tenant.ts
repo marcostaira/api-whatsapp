@@ -43,6 +43,9 @@ export class Tenant {
   @Column({ type: "text", nullable: true })
   webhookUrl: string;
 
+  @Column({ type: "int", default: 5 })
+  maxConnections: number;
+
   @Column({ type: "json", nullable: true })
   settings: Record<string, any>;
 

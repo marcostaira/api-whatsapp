@@ -4,6 +4,11 @@ import { Session } from "../entities/Session";
 import { Contact } from "../entities/Contact";
 import { Message } from "../entities/Message";
 import { Media } from "../entities/Media";
+import * as dotenv from "dotenv";
+import path from "path";
+
+// Garantir que o dotenv seja carregado ANTES de acessar process.env
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -14,7 +19,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_DATABASE || "whatsapp_api",
   entities: [Tenant, Session, Contact, Message, Media],
   synchronize: process.env.NODE_ENV === "development",
-  logging: process.env.NODE_ENV === "development",
+  logging: process.env.NODE_ENV === "production",
   charset: "utf8mb4",
   timezone: "+00:00",
 });

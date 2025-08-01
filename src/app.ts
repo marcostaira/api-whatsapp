@@ -5,9 +5,18 @@ import path from "path";
 import { initializeDatabase } from "./config/database";
 import apiRoutes from "./routes/api";
 import { handleUploadError } from "./middleware/upload";
+import {
+  errorRecoveryMiddleware,
+  notFoundHandler,
+  healthCheck,
+  startPeriodicLogging,
+} from "./middleware/errorRecovery";
 
 // Load environment variables FIRST - before any other imports
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+
+// Start periodic logging
+startPeriodicLogging();
 
 // Debug: Log if .env was loaded
 console.log("🔧 Environment loaded:");
@@ -20,24 +29,29 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGINS?.split(",") || [
+      "http://localhost:3000",
+      "http://localhost:3001",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({
-    success: true,
-    message: "WhatsApp API is running",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0",
-    environment: process.env.NODE_ENV || "development",
-    database: {
-      host: process.env.DB_HOST || "not configured",
-      database: process.env.DB_DATABASE || "not configured",
-    },
+// Request logging in development
+if (process.env.NODE_ENV === "development") {
+  app.use((req, res, next) => {
+    console.log(`📡 ${req.method} ${req.path}`);
+    next();
   });
-});
+}
+
+// Health check endpoint (melhorado)
+app.get("/health", healthCheck);
 
 // API routes
 app.use("/api", apiRoutes);
@@ -45,31 +59,11 @@ app.use("/api", apiRoutes);
 // Upload error handler
 app.use(handleUploadError);
 
-// Global error handler
-app.use(
-  (
-    err: any,
-    req: express.Request,
-    res: express.Response,
-    next: express.NextFunction
-  ) => {
-    console.error("Global error handler:", err);
-
-    res.status(err.status || 500).json({
-      success: false,
-      error: err.message || "Internal server error",
-      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-    });
-  }
-);
+// Error recovery middleware (IMPORTANTE: antes do error handler)
+app.use(errorRecoveryMiddleware);
 
 // 404 handler
-app.use("*", (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: "Endpoint not found",
-  });
-});
+app.use("*", notFoundHandler);
 
 // Initialize database and start server
 const startServer = async () => {
@@ -77,31 +71,45 @@ const startServer = async () => {
     console.log("🔌 Initializing database connection...");
     await initializeDatabase();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`🚀 WhatsApp API Server running on port ${PORT}`);
       console.log(`📚 Health Check: http://localhost:${PORT}/health`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(
         `💾 Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`
       );
+      console.log(`🛡️ Error Recovery: ENABLED`);
     });
-  } catch (error) {
-    console.error("❌ Failed to start server:", error);
+
+    // Graceful shutdown handlers
+    const gracefulShutdown = (signal: string) => {
+      console.log(`\n📡 Received ${signal}, starting graceful shutdown...`);
+
+      server.close(() => {
+        console.log("✅ HTTP server closed");
+        process.exit(0);
+      });
+
+      // Force close after 10 seconds
+      setTimeout(() => {
+        console.log("⏰ Forcing shutdown after timeout");
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  } catch (error: any) {
+    console.error("❌ Failed to start server:", error.message);
     console.error("💡 Check your .env file and database configuration");
-    process.exit(1);
+
+    // Não sair imediatamente, tentar novamente em 5 segundos
+    console.log("🔄 Retrying in 5 seconds...");
+    setTimeout(() => {
+      startServer();
+    }, 5000);
   }
 };
-
-// Handle graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("SIGTERM received. Shutting down gracefully...");
-  process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  console.log("SIGINT received. Shutting down gracefully...");
-  process.exit(0);
-});
 
 startServer();
 
